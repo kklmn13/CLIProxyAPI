@@ -225,35 +225,26 @@ func (r *UsageReporter) buildRecord(ctx context.Context, detail usage.Detail, fa
 	return r.buildRecordForModel(ctx, r.model, detail, failed, fail)
 }
 
-func (r *UsageReporter) resolveThinkingEffort(ctx context.Context, model string) string {
-	if effort, ok := capturedUsageThinkingEffort(ctx, model); ok && effort != "" {
-		return effort
-	}
-	return thinking.ExtractEffort(nil, model, "", "")
-}
-
 func (r *UsageReporter) buildRecordForModel(ctx context.Context, model string, detail usage.Detail, failed bool, fail usage.Failure) usage.Record {
 	if r == nil {
 		return usage.Record{Model: model, Detail: detail, Failed: failed, Fail: fail}
 	}
 	return usage.Record{
-		Provider:         r.provider,
-		Model:            model,
-		Alias:            r.alias,
-		Source:           r.source,
-		APIKey:           r.apiKey,
-		AuthID:           r.authID,
-		AuthIndex:        r.authIndex,
-		AuthType:         r.authType,
-		ReasoningEffort:  r.reasoning,
-		RequestedAt:      r.requestedAt,
-		Latency:          r.latency(),
-		TTFT:             r.ttftDuration(),
-		FirstByteLatency: r.firstByteLatency(ctx),
-		ThinkingEffort:   r.resolveThinkingEffort(ctx, model),
-		Failed:           failed,
-		Fail:             fail,
-		Detail:           detail,
+		Provider:        r.provider,
+		Model:           model,
+		Alias:           r.alias,
+		Source:          r.source,
+		APIKey:          r.apiKey,
+		AuthID:          r.authID,
+		AuthIndex:       r.authIndex,
+		AuthType:        r.authType,
+		ReasoningEffort: r.reasoning,
+		RequestedAt:     r.requestedAt,
+		Latency:         r.latency(),
+		TTFT:            r.ttftDuration(),
+		Failed:          failed,
+		Fail:            fail,
+		Detail:          detail,
 	}
 }
 
@@ -283,25 +274,6 @@ func (r *UsageReporter) latency() time.Duration {
 		return 0
 	}
 	return latency
-}
-
-func (r *UsageReporter) firstByteLatency(ctx context.Context) time.Duration {
-	if r == nil || r.requestedAt.IsZero() || ctx == nil {
-		return 0
-	}
-	ginCtx, ok := ctx.Value("gin").(*gin.Context)
-	if !ok || ginCtx == nil {
-		return 0
-	}
-	raw, exists := ginCtx.Get("API_RESPONSE_TIMESTAMP")
-	if !exists {
-		return 0
-	}
-	timestamp, ok := raw.(time.Time)
-	if !ok || timestamp.IsZero() || timestamp.Before(r.requestedAt) {
-		return 0
-	}
-	return timestamp.Sub(r.requestedAt)
 }
 
 func (r *UsageReporter) setTTFT(ttft time.Duration) {

@@ -21,15 +21,13 @@ type Record struct {
 	AuthType  string
 	Source    string
 	// ReasoningEffort stores the translated upstream thinking level for request event logs.
-	ReasoningEffort  string
-	RequestedAt      time.Time
-	Latency          time.Duration
-	TTFT             time.Duration
-	FirstByteLatency time.Duration
-	ThinkingEffort   string
-	Failed           bool
-	Fail             Failure
-	Detail           Detail
+	ReasoningEffort string
+	RequestedAt     time.Time
+	Latency         time.Duration
+	TTFT            time.Duration
+	Failed          bool
+	Fail            Failure
+	Detail          Detail
 	// ResponseHeaders stores a snapshot of upstream response headers for usage sinks.
 	ResponseHeaders http.Header
 }

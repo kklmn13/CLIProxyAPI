@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/forkruntime/requestlogctx"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	requestlogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
@@ -79,17 +80,7 @@ func newInMemoryWebsocketTimelineLog() *websocketTimelineLog {
 }
 
 func websocketTimelineSourceFromContext(c *gin.Context) *requestlogging.FileBodySource {
-	if c == nil {
-		return nil
-	}
-	value, exists := c.Get(requestlogging.WebsocketTimelineSourceContextKey)
-	if !exists {
-		return nil
-	}
-	source, ok := value.(*requestlogging.FileBodySource)
-	if !ok {
-		return nil
-	}
+	source, _ := requestlogctx.WebsocketTimelineSource(c)
 	return source
 }
 
@@ -141,7 +132,7 @@ func (l *websocketTimelineLog) SetContext(c *gin.Context) {
 	l.closeCurrentPart()
 	if l.source != nil {
 		if l.source.HasPayload() {
-			c.Set(requestlogging.WebsocketTimelineSourceContextKey, l.source)
+			requestlogctx.SetWebsocketTimelineSource(c, l.source)
 			return
 		}
 		if errCleanup := l.source.Cleanup(); errCleanup != nil {
@@ -1361,11 +1352,5 @@ func formatWebsocketTimelineEvent(eventType string, payload []byte, timestamp ti
 }
 
 func markAPIResponseTimestamp(c *gin.Context) {
-	if c == nil {
-		return
-	}
-	if _, exists := c.Get("API_RESPONSE_TIMESTAMP"); exists {
-		return
-	}
-	c.Set("API_RESPONSE_TIMESTAMP", time.Now())
+	requestlogctx.MarkAPIResponseTimestamp(c)
 }

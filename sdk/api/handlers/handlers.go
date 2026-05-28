@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/forkruntime/requestlogctx"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/thinking"
@@ -430,13 +431,11 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 			logging.SetResponseStatus(cancelCtx, c.Writer.Status())
 		}
 		if h.Cfg.RequestLog && len(params) == 1 {
-			if existing, exists := c.Get("API_RESPONSE"); exists {
-				if existingBytes, ok := existing.([]byte); ok && len(bytes.TrimSpace(existingBytes)) > 0 {
-					switch params[0].(type) {
-					case error, string:
-						cancel()
-						return
-					}
+			if existingBytes := requestlogctx.APIResponse(c); len(bytes.TrimSpace(existingBytes)) > 0 {
+				switch params[0].(type) {
+				case error, string:
+					cancel()
+					return
 				}
 			}
 
@@ -452,13 +451,11 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 				payload = []byte(data)
 			}
 			if len(payload) > 0 {
-				if existing, exists := c.Get("API_RESPONSE"); exists {
-					if existingBytes, ok := existing.([]byte); ok && len(existingBytes) > 0 {
-						trimmedPayload := bytes.TrimSpace(payload)
-						if len(trimmedPayload) > 0 && bytes.Contains(existingBytes, trimmedPayload) {
-							cancel()
-							return
-						}
+				if existingBytes := requestlogctx.APIResponse(c); len(existingBytes) > 0 {
+					trimmedPayload := bytes.TrimSpace(payload)
+					if len(trimmedPayload) > 0 && bytes.Contains(existingBytes, trimmedPayload) {
+						cancel()
+						return
 					}
 				}
 				appendAPIResponse(c, payload)
@@ -518,29 +515,7 @@ func (h *BaseAPIHandler) StartNonStreamingKeepAlive(c *gin.Context, ctx context.
 
 // appendAPIResponse preserves any previously captured API response and appends new data.
 func appendAPIResponse(c *gin.Context, data []byte) {
-	if c == nil || len(data) == 0 {
-		return
-	}
-
-	// Capture timestamp on first API response
-	if _, exists := c.Get("API_RESPONSE_TIMESTAMP"); !exists {
-		c.Set("API_RESPONSE_TIMESTAMP", time.Now())
-	}
-
-	if existing, exists := c.Get("API_RESPONSE"); exists {
-		if existingBytes, ok := existing.([]byte); ok && len(existingBytes) > 0 {
-			combined := make([]byte, 0, len(existingBytes)+len(data)+1)
-			combined = append(combined, existingBytes...)
-			if existingBytes[len(existingBytes)-1] != '\n' {
-				combined = append(combined, '\n')
-			}
-			combined = append(combined, data...)
-			c.Set("API_RESPONSE", combined)
-			return
-		}
-	}
-
-	c.Set("API_RESPONSE", bytes.Clone(data))
+	requestlogctx.AppendAPIResponse(c, data)
 }
 
 // ExecuteWithAuthManager executes a non-streaming request via the core auth manager.
@@ -1050,19 +1025,14 @@ func (h *BaseAPIHandler) WriteErrorResponse(c *gin.Context, msg *interfaces.Erro
 
 	body := BuildErrorResponseBody(status, errText)
 	// Append first to preserve upstream response logs, then drop duplicate payloads if already recorded.
-	var previous []byte
-	if existing, exists := c.Get("API_RESPONSE"); exists {
-		if existingBytes, ok := existing.([]byte); ok && len(existingBytes) > 0 {
-			previous = existingBytes
-		}
-	}
+	previous := requestlogctx.APIResponse(c)
 	appendAPIResponse(c, body)
 	trimmedErrText := strings.TrimSpace(errText)
 	trimmedBody := bytes.TrimSpace(body)
 	if len(previous) > 0 {
 		if (trimmedErrText != "" && bytes.Contains(previous, []byte(trimmedErrText))) ||
 			(len(trimmedBody) > 0 && bytes.Contains(previous, trimmedBody)) {
-			c.Set("API_RESPONSE", previous)
+			requestlogctx.SetAPIResponse(c, previous)
 		}
 	}
 
@@ -1075,17 +1045,7 @@ func (h *BaseAPIHandler) WriteErrorResponse(c *gin.Context, msg *interfaces.Erro
 
 func (h *BaseAPIHandler) LoggingAPIResponseError(ctx context.Context, err *interfaces.ErrorMessage) {
 	if h.Cfg.RequestLog {
-		if ginContext, ok := ctx.Value("gin").(*gin.Context); ok {
-			if apiResponseErrors, isExist := ginContext.Get("API_RESPONSE_ERROR"); isExist {
-				if slicesAPIResponseError, isOk := apiResponseErrors.([]*interfaces.ErrorMessage); isOk {
-					slicesAPIResponseError = append(slicesAPIResponseError, err)
-					ginContext.Set("API_RESPONSE_ERROR", slicesAPIResponseError)
-				}
-			} else {
-				// Create new response data entry
-				ginContext.Set("API_RESPONSE_ERROR", []*interfaces.ErrorMessage{err})
-			}
-		}
+		requestlogctx.AppendAPIResponseError(requestlogctx.FromContext(ctx), err)
 	}
 }
 

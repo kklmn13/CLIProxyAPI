@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/forkruntime/requestlogctx"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 )
@@ -141,7 +142,7 @@ func TestFinalizeStreamingWritesAPIWebsocketTimeline(t *testing.T) {
 		streamWriter: streamWriter,
 	}
 
-	c.Set("API_WEBSOCKET_TIMELINE", []byte("Timestamp: 2026-04-01T12:00:00Z\nEvent: api.websocket.request\n{}"))
+	requestlogctx.SetAPIWebsocketTimeline(c, []byte("Timestamp: 2026-04-01T12:00:00Z\nEvent: api.websocket.request\n{}"))
 
 	if err := wrapper.Finalize(c); err != nil {
 		t.Fatalf("Finalize error: %v", err)

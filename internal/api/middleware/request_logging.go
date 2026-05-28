@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/klauspost/compress/zstd"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/forkruntime/requestlogctx"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/util"
 )
@@ -71,24 +72,8 @@ func RequestLoggingMiddleware(logger logging.RequestLogger) gin.HandlerFunc {
 	}
 }
 
-type fileBodySourceFactory interface {
-	NewFileBodySource(prefix string) (*logging.FileBodySource, error)
-}
-
 func attachWebsocketLogSources(c *gin.Context, logger logging.RequestLogger, loggerEnabled bool) {
-	if c == nil || !loggerEnabled || !isResponsesWebsocketUpgrade(c.Request) {
-		return
-	}
-	factory, ok := logger.(fileBodySourceFactory)
-	if !ok || factory == nil {
-		return
-	}
-	if source, errSource := factory.NewFileBodySource("websocket-timeline"); errSource == nil {
-		c.Set(logging.WebsocketTimelineSourceContextKey, source)
-	}
-	if source, errSource := factory.NewFileBodySource("api-websocket-timeline"); errSource == nil {
-		c.Set(logging.APIWebsocketTimelineSourceContextKey, source)
-	}
+	requestlogctx.AttachResponsesWebsocketSources(c, logger, loggerEnabled)
 }
 
 func shouldSkipMethodForRequestLogging(req *http.Request) bool {
@@ -98,17 +83,7 @@ func shouldSkipMethodForRequestLogging(req *http.Request) bool {
 	if req.Method != http.MethodGet {
 		return false
 	}
-	return !isResponsesWebsocketUpgrade(req)
-}
-
-func isResponsesWebsocketUpgrade(req *http.Request) bool {
-	if req == nil || req.URL == nil {
-		return false
-	}
-	if req.URL.Path != "/v1/responses" {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(req.Header.Get("Upgrade")), "websocket")
+	return !requestlogctx.IsResponsesWebsocketUpgrade(req)
 }
 
 func shouldCaptureRequestBody(loggerEnabled bool, req *http.Request) bool {

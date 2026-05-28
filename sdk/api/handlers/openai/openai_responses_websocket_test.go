@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/forkruntime/requestlogctx"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	requestlogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
@@ -1082,24 +1083,20 @@ func TestResponsesWebsocketTimelineRecordsDisconnectEvent(t *testing.T) {
 			timelineCh <- ""
 			return
 		}
-		c.Set(requestlogging.WebsocketTimelineSourceContextKey, source)
+		requestlogctx.SetWebsocketTimelineSource(c, source)
 		h.ResponsesWebsocket(c)
 		timeline := ""
 		if value, exists := c.Get(wsTimelineBodyKey); exists {
 			if body, ok := value.([]byte); ok {
 				timeline = string(body)
 			}
-		} else if value, exists := c.Get(requestlogging.WebsocketTimelineSourceContextKey); exists {
-			if source, ok := value.(*requestlogging.FileBodySource); ok {
-				body, _ := source.Bytes()
-				timeline = string(body)
-				_ = source.Cleanup()
-			}
+		} else if source, ok := requestlogctx.WebsocketTimelineSource(c); ok {
+			body, _ := source.Bytes()
+			timeline = string(body)
+			_ = source.Cleanup()
 		}
-		if value, exists := c.Get(requestlogging.APIWebsocketTimelineSourceContextKey); exists {
-			if source, ok := value.(*requestlogging.FileBodySource); ok {
-				_ = source.Cleanup()
-			}
+		if source, ok := requestlogctx.APIWebsocketTimelineSource(c); ok {
+			_ = source.Cleanup()
 		}
 		timelineCh <- timeline
 	})

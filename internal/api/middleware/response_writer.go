@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/forkruntime/requestlogctx"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 )
@@ -270,13 +271,7 @@ func (w *ResponseWriterWrapper) Finalize(c *gin.Context) error {
 		}
 	}
 
-	var slicesAPIResponseError []*interfaces.ErrorMessage
-	apiResponseError, isExist := c.Get("API_RESPONSE_ERROR")
-	if isExist {
-		if apiErrors, ok := apiResponseError.([]*interfaces.ErrorMessage); ok {
-			slicesAPIResponseError = apiErrors
-		}
-	}
+	slicesAPIResponseError := requestlogctx.APIResponseErrors(c)
 
 	hasAPIError := len(slicesAPIResponseError) > 0 || finalStatusCode >= http.StatusBadRequest
 	forceLog := w.logOnErrorOnly && hasAPIError && !w.logger.IsEnabled()
@@ -345,54 +340,24 @@ func (w *ResponseWriterWrapper) cloneHeaders() map[string][]string {
 }
 
 func (w *ResponseWriterWrapper) extractAPIRequest(c *gin.Context) []byte {
-	apiRequest, isExist := c.Get("API_REQUEST")
-	if !isExist {
-		return nil
-	}
-	data, ok := apiRequest.([]byte)
-	if !ok || len(data) == 0 {
-		return nil
-	}
-	return data
+	return requestlogctx.APIRequest(c)
 }
 
 func (w *ResponseWriterWrapper) extractAPIResponse(c *gin.Context) []byte {
-	apiResponse, isExist := c.Get("API_RESPONSE")
-	if !isExist {
-		return nil
-	}
-	data, ok := apiResponse.([]byte)
-	if !ok || len(data) == 0 {
-		return nil
-	}
-	return data
+	return requestlogctx.APIResponse(c)
 }
 
 func (w *ResponseWriterWrapper) extractAPIWebsocketTimeline(c *gin.Context) []byte {
-	apiTimeline, isExist := c.Get("API_WEBSOCKET_TIMELINE")
-	if !isExist {
-		return nil
-	}
-	data, ok := apiTimeline.([]byte)
-	if !ok || len(data) == 0 {
-		return nil
-	}
-	return bytes.Clone(data)
+	return requestlogctx.APIWebsocketTimeline(c)
 }
 
 func (w *ResponseWriterWrapper) extractAPIWebsocketTimelineSource(c *gin.Context) *logging.FileBodySource {
-	return extractFileBodySource(c, logging.APIWebsocketTimelineSourceContextKey)
+	source, _ := requestlogctx.APIWebsocketTimelineSource(c)
+	return source
 }
 
 func (w *ResponseWriterWrapper) extractAPIResponseTimestamp(c *gin.Context) time.Time {
-	ts, isExist := c.Get("API_RESPONSE_TIMESTAMP")
-	if !isExist {
-		return time.Time{}
-	}
-	if t, ok := ts.(time.Time); ok {
-		return t
-	}
-	return time.Time{}
+	return requestlogctx.APIResponseTimestamp(c)
 }
 
 func (w *ResponseWriterWrapper) extractRequestBody(c *gin.Context) []byte {
@@ -420,21 +385,7 @@ func (w *ResponseWriterWrapper) extractWebsocketTimeline(c *gin.Context) []byte 
 }
 
 func (w *ResponseWriterWrapper) extractWebsocketTimelineSource(c *gin.Context) *logging.FileBodySource {
-	return extractFileBodySource(c, logging.WebsocketTimelineSourceContextKey)
-}
-
-func extractFileBodySource(c *gin.Context, key string) *logging.FileBodySource {
-	if c == nil {
-		return nil
-	}
-	value, exists := c.Get(key)
-	if !exists {
-		return nil
-	}
-	source, ok := value.(*logging.FileBodySource)
-	if !ok || source == nil {
-		return nil
-	}
+	source, _ := requestlogctx.WebsocketTimelineSource(c)
 	return source
 }
 

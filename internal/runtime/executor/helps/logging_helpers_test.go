@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/forkruntime/requestlogctx"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 )
 
@@ -21,16 +22,9 @@ func newLoggingHelperTestContext(t *testing.T) (context.Context, *gin.Context) {
 
 func assertAPIResponseTimestampSet(t *testing.T, ginCtx *gin.Context) time.Time {
 	t.Helper()
-	value, exists := ginCtx.Get("API_RESPONSE_TIMESTAMP")
-	if !exists {
-		t.Fatal("API_RESPONSE_TIMESTAMP was not set")
-	}
-	timestamp, ok := value.(time.Time)
-	if !ok {
-		t.Fatalf("API_RESPONSE_TIMESTAMP type = %T, want time.Time", value)
-	}
+	timestamp := requestlogctx.APIResponseTimestamp(ginCtx)
 	if timestamp.IsZero() {
-		t.Fatal("API_RESPONSE_TIMESTAMP is zero")
+		t.Fatal("API response timestamp is zero")
 	}
 	return timestamp
 }
@@ -38,15 +32,11 @@ func assertAPIResponseTimestampSet(t *testing.T, ginCtx *gin.Context) time.Time 
 func TestMarkAPIResponseTimestampDoesNotOverwriteExisting(t *testing.T) {
 	ctx, ginCtx := newLoggingHelperTestContext(t)
 	existing := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
-	ginCtx.Set("API_RESPONSE_TIMESTAMP", existing)
+	requestlogctx.SetAPIResponseTimestamp(ginCtx, existing)
 
 	MarkAPIResponseTimestamp(ctx)
 
-	value, _ := ginCtx.Get("API_RESPONSE_TIMESTAMP")
-	timestamp, ok := value.(time.Time)
-	if !ok {
-		t.Fatalf("API_RESPONSE_TIMESTAMP type = %T, want time.Time", value)
-	}
+	timestamp := requestlogctx.APIResponseTimestamp(ginCtx)
 	if !timestamp.Equal(existing) {
 		t.Fatalf("API_RESPONSE_TIMESTAMP = %v, want existing %v", timestamp, existing)
 	}
@@ -68,7 +58,7 @@ func TestRecordAPIResponseMetadataMarksTimestampWithoutRequestLogging(t *testing
 			RecordAPIResponseMetadata(ctx, tt.cfg, 200, nil)
 
 			assertAPIResponseTimestampSet(t, ginCtx)
-			if _, exists := ginCtx.Get(apiResponseKey); exists {
+			if response := requestlogctx.APIResponse(ginCtx); len(response) > 0 {
 				t.Fatal("API response log was written while request logging was disabled")
 			}
 		})
@@ -95,7 +85,7 @@ func TestAppendAPIResponseChunkMarksTimestampWhenRequestLoggingDisabled(t *testi
 	AppendAPIResponseChunk(ctx, &config.Config{SDKConfig: config.SDKConfig{RequestLog: false}}, []byte(" data: hello\n"))
 
 	assertAPIResponseTimestampSet(t, ginCtx)
-	if _, exists := ginCtx.Get(apiResponseKey); exists {
+	if response := requestlogctx.APIResponse(ginCtx); len(response) > 0 {
 		t.Fatal("API response log was written while request logging was disabled")
 	}
 }
@@ -105,7 +95,7 @@ func TestAppendAPIResponseChunkDoesNotMarkTimestampForWhitespaceChunk(t *testing
 
 	AppendAPIResponseChunk(ctx, &config.Config{SDKConfig: config.SDKConfig{RequestLog: false}}, []byte(" \n\t "))
 
-	if _, exists := ginCtx.Get("API_RESPONSE_TIMESTAMP"); exists {
+	if timestamp := requestlogctx.APIResponseTimestamp(ginCtx); !timestamp.IsZero() {
 		t.Fatal("API_RESPONSE_TIMESTAMP was set for an all-whitespace chunk")
 	}
 }
@@ -126,7 +116,7 @@ func TestRecordAPIWebsocketHandshakeMarksTimestampWithoutRequestLogging(t *testi
 			RecordAPIWebsocketHandshake(ctx, tt.cfg, 101, nil)
 
 			assertAPIResponseTimestampSet(t, ginCtx)
-			if _, exists := ginCtx.Get(apiWebsocketTimelineKey); exists {
+			if timeline := requestlogctx.APIWebsocketTimeline(ginCtx); len(timeline) > 0 {
 				t.Fatal("API websocket timeline was written while request logging was disabled")
 			}
 		})
@@ -149,7 +139,7 @@ func TestAppendAPIWebsocketResponseMarksTimestampWithoutRequestLogging(t *testin
 			AppendAPIWebsocketResponse(ctx, tt.cfg, []byte(" response payload "))
 
 			assertAPIResponseTimestampSet(t, ginCtx)
-			if _, exists := ginCtx.Get(apiWebsocketTimelineKey); exists {
+			if timeline := requestlogctx.APIWebsocketTimeline(ginCtx); len(timeline) > 0 {
 				t.Fatal("API websocket timeline was written while request logging was disabled")
 			}
 		})
@@ -171,7 +161,7 @@ func TestAppendAPIWebsocketResponseDoesNotMarkTimestampForEmptyOrWhitespacePaylo
 
 			AppendAPIWebsocketResponse(ctx, &config.Config{SDKConfig: config.SDKConfig{RequestLog: false}}, tt.payload)
 
-			if _, exists := ginCtx.Get("API_RESPONSE_TIMESTAMP"); exists {
+			if timestamp := requestlogctx.APIResponseTimestamp(ginCtx); !timestamp.IsZero() {
 				t.Fatal("API_RESPONSE_TIMESTAMP was set for an empty or all-whitespace websocket response")
 			}
 		})
@@ -201,15 +191,11 @@ func TestAPIWebsocketResponseTimestampDoesNotOverwriteExisting(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, ginCtx := newLoggingHelperTestContext(t)
 			existing := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
-			ginCtx.Set("API_RESPONSE_TIMESTAMP", existing)
+			requestlogctx.SetAPIResponseTimestamp(ginCtx, existing)
 
 			tt.call(ctx)
 
-			value, _ := ginCtx.Get("API_RESPONSE_TIMESTAMP")
-			timestamp, ok := value.(time.Time)
-			if !ok {
-				t.Fatalf("API_RESPONSE_TIMESTAMP type = %T, want time.Time", value)
-			}
+			timestamp := requestlogctx.APIResponseTimestamp(ginCtx)
 			if !timestamp.Equal(existing) {
 				t.Fatalf("API_RESPONSE_TIMESTAMP = %v, want existing %v", timestamp, existing)
 			}

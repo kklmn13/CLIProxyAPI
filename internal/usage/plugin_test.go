@@ -20,16 +20,16 @@ func TestLoggerPluginPersistsRecord(t *testing.T) {
 	internallogging.SetResponseStatus(ctx, 200)
 
 	plugin.HandleUsage(ctx, coreusage.Record{
-		APIKey:           " api-key ",
-		Provider:         " claude ",
-		Model:            " claude-sonnet-4-6 ",
-		Source:           " user@example.com ",
-		AuthIndex:        " 0 ",
-		AuthType:         " oauth ",
-		RequestedAt:      time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC),
-		Latency:          1800 * time.Millisecond,
-		FirstByteLatency: 320 * time.Millisecond,
-		ThinkingEffort:   " high ",
+		APIKey:          " api-key ",
+		Provider:        " claude ",
+		Model:           " claude-sonnet-4-6 ",
+		Source:          " user@example.com ",
+		AuthIndex:       " 0 ",
+		AuthType:        " oauth ",
+		RequestedAt:     time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC),
+		Latency:         1800 * time.Millisecond,
+		TTFT:            320 * time.Millisecond,
+		ReasoningEffort: " high ",
 		Detail: coreusage.Detail{
 			InputTokens:     300,
 			OutputTokens:    500,

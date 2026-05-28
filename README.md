@@ -17,17 +17,13 @@
 
 每条 usage detail 额外记录：
 
-- `first_byte_latency_ms`：首字延迟。
-- `generation_ms`：表示首字之后到记录完成之间的耗时近似值。
-- `thinking_effort`：请求的 thinking / reasoning 强度，例如 `low`、`medium`、`high`、`xhigh`、`budget:4096`。
+- `first_byte_latency_ms`：保留字段名，值来自 upstream `TTFT`（上游响应首 token/首字节耗时）。
+- `generation_ms`：保留字段名，按 `latency_ms - first_byte_latency_ms` 计算。
+- `thinking_effort`：保留字段名，值来自 upstream `ReasoningEffort`（最终发给上游 provider 的 reasoning effort）。
 
 ### 3. Thinking effort 提取与透传
 
-本 fork 在请求进入各 executor 时提取 thinking / reasoning 配置，并写入 usage：
-
-- 支持模型 suffix，例如 `model(high)`、`model(4096)`。
-- 支持 OpenAI / OpenAI Responses / Codex / Claude / Gemini / Kimi 等请求体格式。
-- `openai-response` compact 路径也会应用并记录对应 reasoning effort。
+thinking / reasoning 配置提取与 usage 记录跟随 upstream 实现，不再保留 fork 独立提取链路。
 
 ### 4. Fork 自动同步相关 workflow
 
@@ -35,7 +31,7 @@
 
 ## 维护注意事项
 
-- 合并 upstream 时，优先保留本 fork 的 SQLite usage 模块、usage API、thinking effort 记录和首字延迟记录能力。
+- 合并 upstream 时，优先保留本 fork 的 SQLite usage 模块和 usage API；与 upstream 重叠的 usage 字段逻辑优先收敛到 upstream 实现。
 
 ## 友链
 

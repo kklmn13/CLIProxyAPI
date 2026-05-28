@@ -130,8 +130,9 @@ func normalizeRecord(ctx context.Context, record coreusage.Record) Record {
 	timestamp = timestamp.UTC()
 
 	latencyMs := durationMs(record.Latency)
-	firstByteMs := durationMs(record.FirstByteLatency)
 	detail := record.Detail
+
+	firstByteMs := durationMs(record.TTFT)
 
 	return Record{
 		ID:                 uuid.NewString(),
@@ -147,7 +148,7 @@ func normalizeRecord(ctx context.Context, record coreusage.Record) Record {
 		LatencyMs:          latencyMs,
 		FirstByteLatencyMs: firstByteMs,
 		GenerationMs:       nonNegative(latencyMs - firstByteMs),
-		ThinkingEffort:     strings.TrimSpace(record.ThinkingEffort),
+		ThinkingEffort:     strings.TrimSpace(record.ReasoningEffort),
 		Tokens: TokenStats{
 			InputTokens:     detail.InputTokens,
 			OutputTokens:    detail.OutputTokens,
