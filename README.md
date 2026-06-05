@@ -21,17 +21,9 @@
 - `generation_ms`：保留字段名，按 `latency_ms - first_byte_latency_ms` 计算。
 - `thinking_effort`：保留字段名，值来自 upstream `ReasoningEffort`（最终发给上游 provider 的 reasoning effort）。
 
-### 3. Thinking effort 提取与透传
-
-thinking / reasoning 配置提取与 usage 记录跟随 upstream 实现，不再保留 fork 独立提取链路。
-
-### 4. Fork 自动同步相关 workflow
+### 3. Fork 自动同步相关 workflow
 
 本 fork 调整了 GitHub workflow，用于跟踪 upstream 更新和标签同步；不完全沿用 upstream 的 workflow 配置。
-
-## 维护注意事项
-
-- 合并 upstream 时，优先保留本 fork 的 SQLite usage 模块和 usage API；与 upstream 重叠的 usage 字段逻辑优先收敛到 upstream 实现。
 
 ## 友链
 

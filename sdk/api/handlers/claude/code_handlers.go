@@ -15,10 +15,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	. "github.com/router-for-me/CLIProxyAPI/v7/internal/constant"
-	"github.com/router-for-me/CLIProxyAPI/v7/internal/forkruntime/requestlogctx"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
@@ -455,5 +455,23 @@ func claudeErrorTypeFromStatus(status int) string {
 }
 
 func appendClaudeAPIResponse(c *gin.Context, data []byte) {
-	requestlogctx.AppendAPIResponse(c, data)
+	if c == nil || len(data) == 0 {
+		return
+	}
+	if _, exists := c.Get("API_RESPONSE_TIMESTAMP"); !exists {
+		c.Set("API_RESPONSE_TIMESTAMP", time.Now())
+	}
+	if existing, exists := c.Get("API_RESPONSE"); exists {
+		if existingBytes, ok := existing.([]byte); ok && len(existingBytes) > 0 {
+			combined := make([]byte, 0, len(existingBytes)+len(data)+1)
+			combined = append(combined, existingBytes...)
+			if existingBytes[len(existingBytes)-1] != '\n' {
+				combined = append(combined, '\n')
+			}
+			combined = append(combined, data...)
+			c.Set("API_RESPONSE", combined)
+			return
+		}
+	}
+	c.Set("API_RESPONSE", bytes.Clone(data))
 }

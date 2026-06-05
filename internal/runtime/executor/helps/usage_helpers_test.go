@@ -174,7 +174,7 @@ func TestUsageReporterBuildRecordIncludesLatency(t *testing.T) {
 		requestedAt: time.Now().Add(-1500 * time.Millisecond),
 	}
 
-	record := reporter.buildRecord(context.Background(), usage.Detail{TotalTokens: 3}, false)
+	record := reporter.buildRecord(usage.Detail{TotalTokens: 3}, false)
 	if record.Latency < time.Second {
 		t.Fatalf("latency = %v, want >= 1s", record.Latency)
 	}
@@ -222,7 +222,7 @@ func TestUsageReporterBuildRecordIncludesRequestedModelAlias(t *testing.T) {
 	ctx := usage.WithRequestedModelAlias(context.Background(), "client-gpt")
 	reporter := NewUsageReporter(ctx, "openai", "gpt-5.4", nil)
 
-	record := reporter.buildRecord(ctx, usage.Detail{TotalTokens: 3}, false)
+	record := reporter.buildRecord(usage.Detail{TotalTokens: 3}, false)
 	if record.Model != "gpt-5.4" {
 		t.Fatalf("model = %q, want %q", record.Model, "gpt-5.4")
 	}
@@ -234,7 +234,7 @@ func TestUsageReporterBuildRecordIncludesRequestedModelAlias(t *testing.T) {
 func TestNewExecutorUsageReporterIncludesExecutorType(t *testing.T) {
 	reporter := NewExecutorUsageReporter(context.Background(), &TestUsageExecutor{}, "gpt-5.4", nil)
 
-	record := reporter.buildRecord(context.Background(), usage.Detail{TotalTokens: 3}, false)
+	record := reporter.buildRecord(usage.Detail{TotalTokens: 3}, false)
 	if record.Provider != "test-provider" {
 		t.Fatalf("provider = %q, want %q", record.Provider, "test-provider")
 	}
@@ -247,7 +247,7 @@ func TestUsageReporterBuildRecordIncludesReasoningEffort(t *testing.T) {
 	ctx := usage.WithReasoningEffort(context.Background(), "medium")
 	reporter := NewUsageReporter(ctx, "openai", "gpt-5.4", nil)
 
-	record := reporter.buildRecord(ctx, usage.Detail{TotalTokens: 3}, false)
+	record := reporter.buildRecord(usage.Detail{TotalTokens: 3}, false)
 	if record.ReasoningEffort != "medium" {
 		t.Fatalf("reasoning effort = %q, want %q", record.ReasoningEffort, "medium")
 	}
@@ -257,7 +257,7 @@ func TestUsageReporterBuildRecordIncludesServiceTier(t *testing.T) {
 	ctx := usage.WithServiceTier(context.Background(), "priority")
 	reporter := NewUsageReporter(ctx, "openai", "gpt-5.4", nil)
 
-	record := reporter.buildRecord(context.Background(), usage.Detail{TotalTokens: 3}, false)
+	record := reporter.buildRecord(usage.Detail{TotalTokens: 3}, false)
 	if record.ServiceTier != "priority" {
 		t.Fatalf("service tier = %q, want %q", record.ServiceTier, "priority")
 	}
@@ -268,7 +268,7 @@ func TestUsageReporterSetTranslatedReasoningEffortUpdatesServiceTier(t *testing.
 
 	reporter.SetTranslatedReasoningEffort([]byte(`{"service_tier":"priority"}`), "openai")
 
-	record := reporter.buildRecord(context.Background(), usage.Detail{TotalTokens: 3}, false)
+	record := reporter.buildRecord(usage.Detail{TotalTokens: 3}, false)
 	if record.ServiceTier != "priority" {
 		t.Fatalf("service tier = %q, want %q", record.ServiceTier, "priority")
 	}
@@ -280,7 +280,7 @@ func TestUsageReporterSetTranslatedReasoningEffortDefaultsServiceTierWhenRemoved
 
 	reporter.SetTranslatedReasoningEffort([]byte(`{"model":"gpt-5.4"}`), "openai")
 
-	record := reporter.buildRecord(context.Background(), usage.Detail{TotalTokens: 3}, false)
+	record := reporter.buildRecord(usage.Detail{TotalTokens: 3}, false)
 	if record.ServiceTier != usage.DefaultServiceTier {
 		t.Fatalf("service tier = %q, want %q", record.ServiceTier, usage.DefaultServiceTier)
 	}
@@ -293,13 +293,13 @@ func TestUsageReporterBuildAdditionalModelRecordSkipsZeroTokens(t *testing.T) {
 		requestedAt: time.Now(),
 	}
 
-	if _, ok := reporter.buildAdditionalModelRecord(context.Background(), "gpt-image-2", usage.Detail{}); ok {
+	if _, ok := reporter.buildAdditionalModelRecord("gpt-image-2", usage.Detail{}); ok {
 		t.Fatalf("expected all-zero token usage to be skipped")
 	}
-	if _, ok := reporter.buildAdditionalModelRecord(context.Background(), "gpt-image-2", usage.Detail{InputTokens: 2}); !ok {
+	if _, ok := reporter.buildAdditionalModelRecord("gpt-image-2", usage.Detail{InputTokens: 2}); !ok {
 		t.Fatalf("expected non-zero input token usage to be recorded")
 	}
-	if _, ok := reporter.buildAdditionalModelRecord(context.Background(), "gpt-image-2", usage.Detail{CachedTokens: 2}); !ok {
+	if _, ok := reporter.buildAdditionalModelRecord("gpt-image-2", usage.Detail{CachedTokens: 2}); !ok {
 		t.Fatalf("expected non-zero cached token usage to be recorded")
 	}
 }

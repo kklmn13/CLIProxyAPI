@@ -12,7 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/klauspost/compress/zstd"
-	"github.com/router-for-me/CLIProxyAPI/v7/internal/forkruntime/requestlogctx"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 )
 
@@ -158,54 +157,48 @@ func TestAttachRequestLogSourcesUsesLoggerLogsDir(t *testing.T) {
 	attachRequestLogSources(c, logger, true)
 	defer cleanupFileBodySourcesFromContext(c)
 
-	websocketSource, websocketOK := requestlogctx.WebsocketTimelineSource(c)
-	apiWebsocketSource, apiWebsocketOK := requestlogctx.APIWebsocketTimelineSource(c)
-	sources := []struct {
-		name   string
-		source *logging.FileBodySource
-	}{
-		{name: "websocket", source: mustRequestLogSource(t, websocketSource, websocketOK)},
-		{name: "api websocket", source: mustRequestLogSource(t, apiWebsocketSource, apiWebsocketOK)},
-	}
-	for _, item := range sources {
-		file, errPart := item.source.CreatePart("probe")
+	for _, key := range []string{
+		logging.WebsocketTimelineSourceContextKey,
+		logging.APIWebsocketTimelineSourceContextKey,
+	} {
+		value, exists := c.Get(key)
+		if !exists {
+			t.Fatalf("expected %s source to be attached", key)
+		}
+		source, ok := value.(*logging.FileBodySource)
+		if !ok || source == nil {
+			t.Fatalf("%s source type = %T", key, value)
+		}
+		file, errPart := source.CreatePart("probe")
 		if errPart != nil {
-			t.Fatalf("CreatePart(%s): %v", item.name, errPart)
+			t.Fatalf("CreatePart(%s): %v", key, errPart)
 		}
 		path := file.Name()
 		if errClose := file.Close(); errClose != nil {
 			t.Fatalf("close part: %v", errClose)
 		}
 		if !strings.HasPrefix(path, logsDir+string(os.PathSeparator)) {
-			t.Fatalf("%s part path %s is not under logs dir %s", item.name, path, logsDir)
+			t.Fatalf("%s part path %s is not under logs dir %s", key, path, logsDir)
 		}
 	}
 }
 
 func cleanupFileBodySourcesFromContext(c *gin.Context) {
-	for _, source := range []*logging.FileBodySource{
-		optionalRequestLogSource(requestlogctx.WebsocketTimelineSource(c)),
-		optionalRequestLogSource(requestlogctx.APIWebsocketTimelineSource(c)),
+	if c == nil {
+		return
+	}
+	for _, key := range []string{
+		logging.WebsocketTimelineSourceContextKey,
+		logging.APIWebsocketTimelineSourceContextKey,
 	} {
-		if source != nil {
+		value, exists := c.Get(key)
+		if !exists {
+			continue
+		}
+		if source, ok := value.(*logging.FileBodySource); ok && source != nil {
 			_ = source.Cleanup()
 		}
 	}
-}
-
-func mustRequestLogSource(t *testing.T, source *logging.FileBodySource, ok bool) *logging.FileBodySource {
-	t.Helper()
-	if !ok || source == nil {
-		t.Fatalf("expected request log source to be attached")
-	}
-	return source
-}
-
-func optionalRequestLogSource(source *logging.FileBodySource, ok bool) *logging.FileBodySource {
-	if !ok {
-		return nil
-	}
-	return source
 }
 
 func TestCaptureRequestInfoDecodesZstdRequestBodyForLog(t *testing.T) {

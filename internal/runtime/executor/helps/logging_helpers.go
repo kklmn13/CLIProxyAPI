@@ -13,7 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
-	"github.com/router-for-me/CLIProxyAPI/v7/internal/forkruntime/requestlogctx"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/util"
 	log "github.com/sirupsen/logrus"
@@ -21,8 +20,11 @@ import (
 )
 
 const (
-	apiAttemptsKey = "API_UPSTREAM_ATTEMPTS"
-	creditsUsedKey = "__antigravity_credits_used__"
+	apiAttemptsKey          = "API_UPSTREAM_ATTEMPTS"
+	apiRequestKey           = "API_REQUEST"
+	apiResponseKey          = "API_RESPONSE"
+	apiWebsocketTimelineKey = "API_WEBSOCKET_TIMELINE"
+	creditsUsedKey          = "__antigravity_credits_used__"
 )
 
 // UpstreamRequestLog captures the outbound upstream request details for logging.
@@ -135,12 +137,11 @@ func RecordAPIRequest(ctx context.Context, cfg *config.Config, info UpstreamRequ
 
 // RecordAPIResponseMetadata captures upstream response status/header information for the latest attempt.
 func RecordAPIResponseMetadata(ctx context.Context, cfg *config.Config, status int, headers http.Header) {
-	ginCtx := ginContextFrom(ctx)
-	markAPIResponseTimestamp(ginCtx)
 	logging.SetResponseHeaders(ctx, headers)
 	if !requestLogCaptureEnabled(cfg) {
 		return
 	}
+	ginCtx := ginContextFrom(ctx)
 	if ginCtx == nil {
 		return
 	}
@@ -190,15 +191,14 @@ func RecordAPIResponseError(ctx context.Context, cfg *config.Config, err error) 
 
 // AppendAPIResponseChunk appends an upstream response chunk to Gin context for request logging.
 func AppendAPIResponseChunk(ctx context.Context, cfg *config.Config, chunk []byte) {
+	if !requestLogCaptureEnabled(cfg) {
+		return
+	}
 	data := bytes.TrimSpace(chunk)
 	if len(data) == 0 {
 		return
 	}
 	ginCtx := ginContextFrom(ctx)
-	markAPIResponseTimestamp(ginCtx)
-	if !requestLogCaptureEnabled(cfg) {
-		return
-	}
 	if ginCtx == nil {
 		return
 	}
@@ -267,12 +267,11 @@ func RecordAPIWebsocketRequest(ctx context.Context, cfg *config.Config, info Ups
 
 // RecordAPIWebsocketHandshake stores the upstream websocket handshake response metadata.
 func RecordAPIWebsocketHandshake(ctx context.Context, cfg *config.Config, status int, headers http.Header) {
-	ginCtx := ginContextFrom(ctx)
-	markAPIResponseTimestamp(ginCtx)
 	logging.SetResponseHeaders(ctx, headers)
 	if !requestLogCaptureEnabled(cfg) {
 		return
 	}
+	ginCtx := ginContextFrom(ctx)
 	if ginCtx == nil {
 		return
 	}
@@ -327,18 +326,18 @@ func WebsocketUpgradeRequestURL(rawURL string) string {
 
 // AppendAPIWebsocketResponse stores an upstream websocket response frame in Gin context.
 func AppendAPIWebsocketResponse(ctx context.Context, cfg *config.Config, payload []byte) {
+	if !requestLogCaptureEnabled(cfg) {
+		return
+	}
 	data := bytes.TrimSpace(payload)
 	if len(data) == 0 {
 		return
 	}
 	ginCtx := ginContextFrom(ctx)
-	markAPIResponseTimestamp(ginCtx)
-	if !requestLogCaptureEnabled(cfg) {
-		return
-	}
 	if ginCtx == nil {
 		return
 	}
+	markAPIResponseTimestamp(ginCtx)
 
 	builder := &strings.Builder{}
 	builder.WriteString(fmt.Sprintf("Timestamp: %s\n", time.Now().Format(time.RFC3339Nano)))
@@ -372,9 +371,6 @@ func RecordAPIWebsocketError(ctx context.Context, cfg *config.Config, stage stri
 }
 
 func ginContextFrom(ctx context.Context) *gin.Context {
-	if ctx == nil {
-		return nil
-	}
 	ginCtx, _ := ctx.Value("gin").(*gin.Context)
 	return ginCtx
 }
@@ -458,7 +454,7 @@ func updateAggregatedRequest(ginCtx *gin.Context, attempts []*upstreamAttempt) {
 	for _, attempt := range attempts {
 		builder.WriteString(attempt.request)
 	}
-	requestlogctx.SetAPIRequest(ginCtx, []byte(builder.String()))
+	ginCtx.Set(apiRequestKey, []byte(builder.String()))
 }
 
 func updateAggregatedResponseIfMemoryBacked(ginCtx *gin.Context, attempts []*upstreamAttempt) {
@@ -489,7 +485,7 @@ func updateAggregatedResponse(ginCtx *gin.Context, attempts []*upstreamAttempt) 
 			builder.WriteString("\n")
 		}
 	}
-	requestlogctx.SetAPIResponse(ginCtx, []byte(builder.String()))
+	ginCtx.Set(apiResponseKey, []byte(builder.String()))
 }
 
 func apiRequestSource(ginCtx *gin.Context) (*logging.FileBodySource, bool) {
@@ -505,12 +501,38 @@ func apiResponseSourceOrNil(ginCtx *gin.Context) *logging.FileBodySource {
 }
 
 func appendAPIWebsocketTimeline(ginCtx *gin.Context, chunk []byte) {
-	requestlogctx.AppendAPIWebsocketTimeline(ginCtx, chunk)
+	if ginCtx == nil {
+		return
+	}
+	data := bytes.TrimSpace(chunk)
+	if len(data) == 0 {
+		return
+	}
+	if source, ok := apiWebsocketTimelineSource(ginCtx); ok {
+		if errAppend := source.AppendPart(data); errAppend == nil {
+			return
+		} else {
+			log.WithError(errAppend).Warn("failed to append api websocket timeline log part")
+		}
+	}
+	if existing, exists := ginCtx.Get(apiWebsocketTimelineKey); exists {
+		if existingBytes, ok := existing.([]byte); ok && len(existingBytes) > 0 {
+			combined := make([]byte, 0, len(existingBytes)+len(data)+2)
+			combined = append(combined, existingBytes...)
+			if !bytes.HasSuffix(existingBytes, []byte("\n")) {
+				combined = append(combined, '\n')
+			}
+			combined = append(combined, '\n')
+			combined = append(combined, data...)
+			ginCtx.Set(apiWebsocketTimelineKey, combined)
+			return
+		}
+	}
+	ginCtx.Set(apiWebsocketTimelineKey, bytes.Clone(data))
 }
 
-// MarkAPIResponseTimestamp records the first API response timestamp in Gin context when available.
-func MarkAPIResponseTimestamp(ctx context.Context) {
-	markAPIResponseTimestamp(ginContextFrom(ctx))
+func apiWebsocketTimelineSource(ginCtx *gin.Context) (*logging.FileBodySource, bool) {
+	return fileBodySourceFromGin(ginCtx, logging.APIWebsocketTimelineSourceContextKey)
 }
 
 func fileBodySourceFromGin(ginCtx *gin.Context, key string) (*logging.FileBodySource, bool) {
@@ -526,7 +548,13 @@ func fileBodySourceFromGin(ginCtx *gin.Context, key string) (*logging.FileBodySo
 }
 
 func markAPIResponseTimestamp(ginCtx *gin.Context) {
-	requestlogctx.MarkAPIResponseTimestamp(ginCtx)
+	if ginCtx == nil {
+		return
+	}
+	if _, exists := ginCtx.Get("API_RESPONSE_TIMESTAMP"); exists {
+		return
+	}
+	ginCtx.Set("API_RESPONSE_TIMESTAMP", time.Now())
 }
 
 func writeHeaders(builder *strings.Builder, headers http.Header) {
