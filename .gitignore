@@ -13,6 +13,7 @@ conv/*
 temp/*
 refs/*
 sandbox.cmd
+plugins/*
 
 # Storage backends
 pgstore/*
